@@ -2,7 +2,7 @@
 
 An n8n automation that finds jobs worth applying to, scores them against your real profile, drafts a cover letter for each strong match, tracks everything in Google Sheets, and emails you a daily digest.
 
-![CareerCompass AI workflow](screenshots/CareerCompass%20AI.png)
+![CareerCompass AI opened in n8n](screenshots/n8n-editor.png)
 
 ## What it does
 
