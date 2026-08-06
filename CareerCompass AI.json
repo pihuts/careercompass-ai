@@ -1,0 +1,781 @@
+{
+  "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+  "name": "CareerCompass AI - Job Match Radar",
+  "nodes": [
+    {
+      "id": "trigger-manual",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [-1100, 0],
+      "parameters": {},
+      "typeVersion": 1
+    },
+    {
+      "id": "trigger-daily",
+      "name": "Daily at 8 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [-1100, 160],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "sticky-overview",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [0, -460],
+      "parameters": {
+        "width": 820,
+        "height": 240,
+        "content": "## CareerCompass AI\n\nScrapes the monthly HN 'Who is Hiring' thread, uses GPT-5.6 Sol to extract structured job data, scores every job against your profile, logs strong matches (>= 75) to Google Sheets, and emails you a daily digest with cover letter drafts.\n\nNo auto-apply: you review the drafts and apply manually."
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "sticky-setup",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [1860, -460],
+      "parameters": {
+        "width": 760,
+        "height": 240,
+        "content": "## Setup\n\n1. Set instance env vars: JOBHUNT_SHEET_ID (Google Sheet ID) and JOBHUNT_EMAIL_TO.\n2. Connect OpenAI, Google Sheets and Gmail credentials.\n3. Edit the Candidate Profile node with your real profile.\n4. Create a sheet tab named 'Job Matches' with headers: Date, Company, Role, Location, Work Mode, Salary, Match Score, Match Reasons, Missing Skills, Email Subject, Cover Letter, Apply URL, Company URL, HN Item ID, Status.\n5. Activate the workflow."
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "http-search",
+      "name": "Search HN Who is Hiring",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [0, 0],
+      "parameters": {
+        "url": "https://hn.algolia.com/api/v1/search_by_date?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=story&hitsPerPage=30",
+        "method": "GET",
+        "options": {}
+      },
+      "typeVersion": 4.2
+    },
+    {
+      "id": "split-hits",
+      "name": "Split Search Hits",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [180, 0],
+      "parameters": {
+        "options": {},
+        "fieldToSplitOut": "hits"
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "set-metadata",
+      "name": "Extract Post Metadata",
+      "type": "n8n-nodes-base.set",
+      "position": [360, 0],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-title",
+              "name": "title",
+              "type": "string",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "id": "set-created-at",
+              "name": "createdAt",
+              "type": "string",
+              "value": "={{ $json.created_at }}"
+            },
+            {
+              "id": "set-updated-at",
+              "name": "updatedAt",
+              "type": "string",
+              "value": "={{ $json.updated_at }}"
+            },
+            {
+              "id": "set-story-id",
+              "name": "storyId",
+              "type": "string",
+              "value": "={{ $json.story_id }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "filter-recent",
+      "name": "Keep Recent Posts",
+      "type": "n8n-nodes-base.filter",
+      "position": [540, 0],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "filter-recent-cond",
+              "operator": {
+                "type": "dateTime",
+                "operation": "after"
+              },
+              "leftValue": "={{ $json.createdAt }}",
+              "rightValue": "={{ $now.minus({days: 30}) }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 2.2
+    },
+    {
+      "id": "http-main-post",
+      "name": "Get HN Main Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [720, 0],
+      "parameters": {
+        "url": "=https://hacker-news.firebaseio.com/v0/item/{{ $json.storyId }}.json?print=pretty",
+        "options": {}
+      },
+      "typeVersion": 4.2
+    },
+    {
+      "id": "split-kids",
+      "name": "Split Job Comments",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [900, 0],
+      "parameters": {
+        "options": {},
+        "fieldToSplitOut": "kids"
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "http-job-post",
+      "name": "Get Job Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1080, 0],
+      "parameters": {
+        "url": "=https://hacker-news.firebaseio.com/v0/item/{{ $json.kids }}.json?print=pretty",
+        "options": {}
+      },
+      "typeVersion": 4.2
+    },
+    {
+      "id": "set-text",
+      "name": "Extract Comment Text",
+      "type": "n8n-nodes-base.set",
+      "position": [1260, 0],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-text-value",
+              "name": "text",
+              "type": "string",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "id": "set-job-id",
+              "name": "job_id",
+              "type": "string",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "code-clean",
+      "name": "Clean Job Text",
+      "type": "n8n-nodes-base.code",
+      "position": [1440, 0],
+      "parameters": {
+        "jsCode": "const results = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  let text = typeof j.text === 'string' ? j.text : JSON.stringify(j);\n  text = String(text)\n    .replace(/&#x2F;/g, '/')\n    .replace(/&#x27;/g, \"'\")\n    .replace(/&\\w+;/g, ' ')\n    .replace(/<[^>]*>/g, '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  results.push({ json: { cleaned_text: text, job_id: j.job_id } });\n}\nreturn results;"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "limit-jobs",
+      "name": "Limit Jobs per Run",
+      "type": "n8n-nodes-base.limit",
+      "position": [1620, 0],
+      "parameters": {
+        "maxItems": 10
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "set-profile",
+      "name": "Candidate Profile",
+      "type": "n8n-nodes-base.set",
+      "position": [1800, 0],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "set-job-text",
+              "name": "jobText",
+              "type": "string",
+              "value": "={{ $json.cleaned_text }}\n\nJOB REFERENCE: {{ $json.job_id }}"
+            },
+            {
+              "id": "set-profile-value",
+              "name": "candidateProfile",
+              "type": "string",
+              "value": "={{ $env.JOBHUNT_PROFILE || 'Role: Automation Developer / n8n Workflow Engineer; Skills: n8n, TypeScript, Python, REST APIs, OpenAI, LangChain, Google Sheets, Gmail API, Docker; Experience: 3+ years building production automation and AI workflows; Location: Remote / Singapore; Availability: Immediate' }}"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "openai-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [1980, -200],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5.6-sol"
+        },
+        "options": {}
+      },
+      "typeVersion": 1.2
+    },
+    {
+      "id": "output-parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "position": [2160, -200],
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"company\":{\"type\":[\"string\",\"null\"],\"description\":\"Hiring company name\"},\"title\":{\"type\":[\"string\",\"null\"],\"description\":\"Job title\"},\"location\":{\"type\":[\"string\",\"null\"],\"description\":\"Location including remote\"},\"type\":{\"type\":[\"string\",\"null\"],\"enum\":[\"FULL_TIME\",\"PART_TIME\",\"CONTRACT\",\"INTERNSHIP\",\"FREELANCE\",null],\"description\":\"Employment type\"},\"work_location\":{\"type\":[\"string\",\"null\"],\"enum\":[\"REMOTE\",\"HYBRID\",\"ON_SITE\",null],\"description\":\"Work arrangement\"},\"salary\":{\"type\":[\"string\",\"null\"],\"description\":\"Compensation\"},\"description\":{\"type\":[\"string\",\"null\"],\"description\":\"Job description\"},\"apply_url\":{\"type\":[\"string\",\"null\"],\"description\":\"Application URL\"},\"company_url\":{\"type\":[\"string\",\"null\"],\"description\":\"Company website\"},\"hn_item_id\":{\"type\":[\"string\",\"null\"],\"description\":\"Hacker News item id from JOB REFERENCE\"},\"email_subject\":{\"type\":[\"string\",\"null\"],\"description\":\"Short personalized application email subject\"},\"match_score\":{\"type\":[\"number\",\"null\"],\"description\":\"0-100 fit score\"},\"match_reasons\":{\"type\":[\"array\",\"null\"],\"items\":{\"type\":\"string\"},\"description\":\"3-5 specific reasons\"},\"missing_skills\":{\"type\":[\"array\",\"null\"],\"items\":{\"type\":\"string\"},\"description\":\"2-4 missing skills\"},\"cover_letter\":{\"type\":[\"string\",\"null\"],\"description\":\"120-180 word cover letter draft\"}},\"required\":[\"company\",\"title\",\"location\",\"type\",\"work_location\",\"salary\",\"description\",\"apply_url\",\"company_url\",\"hn_item_id\",\"email_subject\",\"match_score\",\"match_reasons\",\"missing_skills\",\"cover_letter\"]}"
+      },
+      "typeVersion": 1.2
+    },
+    {
+      "id": "chain-score",
+      "name": "Parse and Score Job",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "position": [1980, 0],
+      "parameters": {
+        "text": "={{ $json.jobText }}\n\n=== CANDIDATE PROFILE ===\n{{ $json.candidateProfile }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a strict technical recruiter and career coach. Extract the job details from the text into the provided JSON schema, using the JOB REFERENCE for hn_item_id. Then score the job 0-100 against the CANDIDATE PROFILE. Be strict: only give 75+ when the candidate clearly matches 70% or more of the required skills and the location/remote policy. Include 3-5 match reasons, 2-4 missing skills, a short personalized email subject, and a 120-180 word cover letter draft that uses only facts from the profile. Return valid JSON only."
+            }
+          ]
+        },
+        "promptType": "define",
+        "hasOutputParser": true
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "code-normalize",
+      "name": "Normalize AI Output",
+      "type": "n8n-nodes-base.code",
+      "position": [2160, 0],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\nconst str = (v) => v === null || v === undefined ? '' : String(v);\nconst list = (v) => Array.isArray(v) ? v.map(str).join(' | ') : str(v);\nfor (const item of items) {\n  const raw = item.json.output || item.json;\n  results.push({\n    json: {\n      company: str(raw.company),\n      title: str(raw.title),\n      location: str(raw.location),\n      employment_type: str(raw.type),\n      work_location: str(raw.work_location),\n      salary: str(raw.salary),\n      description: str(raw.description),\n      apply_url: str(raw.apply_url),\n      company_url: str(raw.company_url),\n      hn_item_id: str(raw.hn_item_id),\n      email_subject: str(raw.email_subject),\n      match_score: Number(raw.match_score) || 0,\n      match_reasons: list(raw.match_reasons),\n      missing_skills: list(raw.missing_skills),\n      cover_letter: str(raw.cover_letter)\n    }\n  });\n}\nreturn results;"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "filter-strong",
+      "name": "Strong Matches Only",
+      "type": "n8n-nodes-base.filter",
+      "position": [2340, 0],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "filter-score-cond",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "leftValue": "={{ $json.match_score }}",
+              "rightValue": 75
+            }
+          ]
+        }
+      },
+      "typeVersion": 2.2
+    },
+    {
+      "id": "sheets-log",
+      "name": "Log Matches to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [2520, 0],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.JOBHUNT_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Job Matches",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "HN Item ID"
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "value": {
+            "Date": "={{ $now.format('yyyy-MM-dd') }}",
+            "Company": "={{ $json.company }}",
+            "Role": "={{ $json.title }}",
+            "Location": "={{ $json.location }}",
+            "Work Mode": "={{ $json.work_location }}",
+            "Salary": "={{ $json.salary }}",
+            "Match Score": "={{ $json.match_score }}",
+            "Match Reasons": "={{ $json.match_reasons }}",
+            "Missing Skills": "={{ $json.missing_skills }}",
+            "Email Subject": "={{ $json.email_subject }}",
+            "Cover Letter": "={{ $json.cover_letter }}",
+            "Apply URL": "={{ $json.apply_url }}",
+            "Company URL": "={{ $json.company_url }}",
+            "HN Item ID": "={{ $json.hn_item_id }}"
+          },
+          "schema": [
+            {
+              "id": "Date",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Date",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Company",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Role",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Role",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Location",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Location",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Work Mode",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Work Mode",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Salary",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Salary",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Match Score",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Match Score",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Match Reasons",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Match Reasons",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Missing Skills",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Missing Skills",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email Subject",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Email Subject",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Cover Letter",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Cover Letter",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Apply URL",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Apply URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company URL",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Company URL",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HN Item ID",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "HN Item ID",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "type": "string",
+              "display": true,
+              "removed": false,
+              "required": false,
+              "displayName": "Status",
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "typeVersion": 4.5
+    },
+    {
+      "id": "code-digest",
+      "name": "Build Digest",
+      "type": "n8n-nodes-base.code",
+      "position": [2340, 240],
+      "parameters": {
+        "jsCode": "const jobs = $input.all()\n  .map((i) => i.json)\n  .filter((j) => Number(j.match_score) >= 75)\n  .sort((a, b) => Number(b.match_score) - Number(a.match_score))\n  .slice(0, 10);\nreturn [{ json: { jobs: jobs, count: jobs.length } }];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "gmail-digest",
+      "name": "Email Daily Digest",
+      "type": "n8n-nodes-base.gmail",
+      "position": [2520, 240],
+      "parameters": {
+        "sendTo": "={{ $env.JOBHUNT_EMAIL_TO || 'your@email.com' }}",
+        "subject": "=CareerCompass AI - {{ $json.count }} strong matches ({{ $now.format('dd MMM yyyy') }})",
+        "message": "=<html><body style='font-family:Arial,sans-serif;background:#f6f8fa;padding:24px'><div style='max-width:640px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px'><h2 style='margin-top:0'>CareerCompass AI</h2><p><strong>{{ $json.count }}</strong> strong match(es) found today.</p>{{ $json.jobs.map(j => `<div style='border:1px solid #e1e4e8;border-radius:6px;padding:16px;margin:12px 0'><h3 style='margin:0 0 4px'><a href='${j.apply_url}'>${j.title}</a> @ ${j.company}</h3><p style='margin:4px 0'>Score: <strong>${j.match_score}/100</strong> | ${j.location} | ${j.work_location}</p><p style='margin:4px 0'><strong>Why:</strong> ${j.match_reasons}</p><p style='margin:4px 0'><strong>Missing skills:</strong> ${j.missing_skills || 'None'}</p><p style='margin:4px 0'><strong>Suggested subject:</strong> ${j.email_subject}</p><p style='margin:4px 0'><strong>Cover letter draft:</strong></p><blockquote style='margin:4px 0;padding:8px 12px;background:#f6f8fa;border-left:3px solid #2da44e'>${j.cover_letter}</blockquote></div>`).join('') || '<p>No strong matches today. Review your profile or lower the threshold.</p>'}</div></body></html>",
+        "options": {},
+        "emailType": "html"
+      },
+      "typeVersion": 2
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Search HN Who is Hiring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily at 8 AM": {
+      "main": [
+        [
+          {
+            "node": "Search HN Who is Hiring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search HN Who is Hiring": {
+      "main": [
+        [
+          {
+            "node": "Split Search Hits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Search Hits": {
+      "main": [
+        [
+          {
+            "node": "Extract Post Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Post Metadata": {
+      "main": [
+        [
+          {
+            "node": "Keep Recent Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Recent Posts": {
+      "main": [
+        [
+          {
+            "node": "Get HN Main Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get HN Main Post": {
+      "main": [
+        [
+          {
+            "node": "Split Job Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Job Comments": {
+      "main": [
+        [
+          {
+            "node": "Get Job Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Job Comment": {
+      "main": [
+        [
+          {
+            "node": "Extract Comment Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Comment Text": {
+      "main": [
+        [
+          {
+            "node": "Clean Job Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Job Text": {
+      "main": [
+        [
+          {
+            "node": "Limit Jobs per Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit Jobs per Run": {
+      "main": [
+        [
+          {
+            "node": "Candidate Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Candidate Profile": {
+      "main": [
+        [
+          {
+            "node": "Parse and Score Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Parse and Score Job",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Parse and Score Job",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Score Job": {
+      "main": [
+        [
+          {
+            "node": "Normalize AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize AI Output": {
+      "main": [
+        [
+          {
+            "node": "Strong Matches Only",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strong Matches Only": {
+      "main": [
+        [
+          {
+            "node": "Log Matches to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Digest": {
+      "main": [
+        [
+          {
+            "node": "Email Daily Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "v1-careercompass-ai",
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
