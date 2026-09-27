@@ -689,7 +689,7 @@
       "typeVersion": 2,
       "position": [
         1200,
-        0
+        -300
       ],
       "parameters": {
         "jsCode": "console.log(JSON.stringify({timestamp: new Date().toISOString(), runId: $json.runId, result: $json.status})); return [{json: {status: $json.status, runId: $json.runId}}];"

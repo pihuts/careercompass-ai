@@ -1,47 +1,49 @@
 # CareerCompass AI
 
-When the 08:00 schedule or a manual run starts, score eligible jobs and save strong matches, then send one daily digest.
+Every day at 8:00 AM Manila time, or on a manual run, score recent hiring posts for a candidate, save strong matches, send one digest, and stop.
 
-## Production operations
+![CareerCompass workflow in n8n](screenshots/n8n-overview.png)
 
-**Purpose:** When the 08:00 schedule or a manual run starts, score eligible jobs and save strong matches, then send one daily digest.
+These images show a local n8n editor. Red icons mean credentials still need to be connected on your own instance.
 
-- **Scope:** Configured Hacker News search/item API, Job Matches and Digest Runs tabs, OpenAI, personal inbox. No applications are submitted.
-- **Success:** Job Matches upserted by HN Item ID; at most one Digest Runs marker per Manila date and a digest if matches exist.
-- **Inputs:** JOBHUNT_PROFILE and URLs in environment; public HN jobs; OpenAI scoring.
-- **Philippine use:** Provide a truthful Philippines-based profile. Reject roles whose location or remote rules exclude the candidate; preserve posted salary currency and never invent PHP conversion.
+[Search and checks](screenshots/n8n-start.png) · [Match and digest steps](screenshots/n8n-finish.png)
 
-### Configure and run
+## What it does
 
-1. Import this workflow and `Failure Alert.json` into n8n. Connect OpenAI, Google Sheets and Gmail credentials. For a webhook workflow, also connect a Header Auth credential and configure the caller to send it. Use a dedicated Google account with access only to the named spreadsheet and mail account.
-2. Create the tabs and exact headers: Job Matches: Date, Company, Role, Location, Work Mode, Salary, Match Score, Match Reasons, Missing Skills, Email Subject, Cover Letter, Apply URL, Company URL, HN Item ID, Status. Digest Runs: Date, Run ID, Count, Status.
-3. Set required environment values: `JOBHUNT_SHEET_ID, JOBHUNT_EMAIL_TO, JOBHUNT_PROFILE, JOBHUNT_SEARCH_URL, JOBHUNT_ITEM_API_BASE`. For CareerCompass, use `JOBHUNT_SEARCH_URL=https://hn.algolia.com/api/v1/search_by_date?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=story&hitsPerPage=30` and `JOBHUNT_ITEM_API_BASE=https://hacker-news.firebaseio.com/v0/item` as starting URLs. Set `CAREER_ALERT_EMAIL_TO` to the operator's real inbox.
-4. Optional config: CAREER_MAX_JOBS=10; CAREER_MIN_SCORE=75. Set `CAREER_ENABLED=true` to enable runs. Dry run is on unless `CAREER_DRY_RUN=false` is explicitly set. The kill switch is `CAREER_ENABLED=false`; deactivate the workflow too for an immediate stop.
-   On self-hosted n8n, set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` or Code nodes cannot read these values. Run these workflows on a dedicated instance; keep API secrets in n8n credentials and expose only workflow config through environment values.
-   Set `N8N_CONCURRENCY_PRODUCTION_LIMIT=1` on that dedicated instance to serialize Sheet lookups and writes.
-5. Open this workflow's n8n Settings and select the imported Failure Alert workflow as **Error Workflow**. Send its Gmail node from an account the operator monitors. Keep execution retention appropriate for sensitive data.
-6. Run `python smoke_test.py` after every edit; GitHub Actions runs it on push and pull request. With dry run on, run the n8n workflow once and confirm no Google/AI/Gmail nodes executed. Then use a test sheet, test inbox, and representative input before setting `CAREER_DRY_RUN=false`.
+The workflow reads the configured Hacker News hiring thread and item API, checks job text against the candidate profile, asks OpenAI to score likely matches, and saves them in Job Matches. It emails a daily digest when matches exist. It does not apply to jobs, contact employers, or promise that a role accepts Philippine applicants. The candidate must check remote eligibility, salary currency, and every generated cover letter. No peso conversion is invented for a foreign salary.
 
-Manual or daily 08:00 Asia/Manila. Owner: candidate. If the instance is offline, scheduled events are missed and webhook callers must retry with the same request ID. Manually replay missed scheduled runs after recovery. Review this workflow each quarter; retire it when its owner, input source, or business process no longer exists.
+Success means Job Matches rows keyed by HN Item ID and, when there are matches, one Digest Runs row for the Manila date and one Gmail digest. The candidate owns this workflow.
 
-### Reliability, audit, and failure response
+## Set up
 
-- **Reruns:** Job Matches upserts by HN Item ID. Digest Runs records Attempted before Gmail and blocks another digest for the same Manila date. Google Sheets lookup plus upsert is sequential idempotency; Sheets has no atomic uniqueness constraint, so concurrent runs can still duplicate rows. Keep one active run per workflow and reconcile after interruptions.
-- **Partial failure:** An Attempted digest can represent failed delivery. Inspect Gmail and the execution, then clear that marker only after deciding a resend is needed. Never blindly retry a Gmail node after a timeout.
-- **Timeouts/retries:** The workflow has a 900 second execution limit; HTTP calls have 15 second timeouts and three attempts with a two second wait. AI calls use a 30 second timeout. n8n's generic retry also retries some permanent HTTP errors, so disable that per node if your source returns persistent 4xx responses. Writes are not automatically retried because an ambiguous timeout can follow a successful write.
-- **Audit:** n8n execution history and JSON console logs include timestamp, execution ID, and result without raw customer content. Sheet rows carry business keys and run IDs where available. Inspect failed executions and the `Failure Alert` email. The alert workflow depends on n8n being up; use an external uptime monitor for instance outages.
-- **Security:** Store OAuth/API secrets in n8n credentials, not JSON or git. Protect webhook URLs with authenticated ingress and rate limits. Restrict who can view execution history, Sheets, and Gmail. Do not feed sensitive customer or financial data to OpenAI without your organization's approval and retention policy.
-- **Exit status/health:** `python smoke_test.py` exits 0 on pass and nonzero on failure. In n8n, the execution status is the scheduler signal; monitor failed and missing scheduled executions. The latest timestamp in the relevant sheet is the simple status indicator.
+1. On self-hosted n8n, import CareerCompass AI.json and Failure Alert.json. Connect OpenAI, Google Sheets, and Gmail credentials. Restrict the Google account to the candidate's sheet and inbox.
+2. Make a Job Matches tab with: Date, Company, Role, Location, Work Mode, Salary, Match Score, Match Reasons, Missing Skills, Email Subject, Cover Letter, Apply URL, Company URL, HN Item ID, Status. Make a Digest Runs tab with: Date, Run ID, Count, Status.
+3. Set JOBHUNT_SHEET_ID, JOBHUNT_EMAIL_TO, JOBHUNT_PROFILE, JOBHUNT_SEARCH_URL, JOBHUNT_ITEM_API_BASE, and CAREER_ALERT_EMAIL_TO in the server environment. JOBHUNT_PROFILE must truthfully say the candidate is based in the Philippines and describe skills and work eligibility. Suggested starting URLs are https://hn.algolia.com/api/v1/search_by_date?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=story&hitsPerPage=30 and https://hacker-news.firebaseio.com/v0/item. Keep API keys in n8n credentials. Set N8N_BLOCK_ENV_ACCESS_IN_NODE=false on this dedicated instance.
+4. In the main workflow's n8n Settings, choose Failure Alert as its Error Workflow. Connect its Gmail node and test delivery. Optional limits: CAREER_MAX_JOBS=10 and CAREER_MIN_SCORE=75. Set N8N_CONCURRENCY_PRODUCTION_LIMIT=1 to reduce overlapping scheduled runs; manual runs can still overlap.
 
-### Go-live preflight
+CAREER_ENABLED=true allows a run. Dry run is on unless CAREER_DRY_RUN=false. Dry run stops before public APIs, OpenAI, Sheets, and Gmail. Set CAREER_ENABLED=false and deactivate the workflow to stop new runs.
 
-- [ ] Operator and failure inbox assigned; Error Workflow selected and alert tested.
-- [ ] Dry run checked on test input; no live side effect occurred.
-- [ ] Required variables and least-privilege credentials configured; no secrets in the export.
-- [ ] Same request/lead/invoice rerun checked in a test sheet; no second mail or draft.
-- [ ] Network timeout and failure alert checked; partial-write recovery rehearsed.
-- [ ] `CAREER_ENABLED=false` demonstrated as the kill switch.
+## Test before using real job data
 
-**Production gate:** Offline smoke tests do not prove n8n import compatibility or live Google/Gmail/OpenAI behavior. Complete the test-account run above and review the Sheets concurrency and ambiguous-email limits before activating on real data.
+1. Run python smoke_test.py after edits. It exits nonzero on failure. GitHub Actions runs it on pushes and pull requests.
+2. Enable the flag and leave dry run on. Run manually; confirm dry_run and no external calls.
+3. Use a test sheet and inbox, set CAREER_DRY_RUN=false, and run against a small known hiring thread. Check the rows, location filtering, and digest. Run again on the same Manila date; check that no second digest appears.
+4. Test an empty search result, a network failure, and Failure Alert delivery.
 
-These exports target self-hosted n8n. n8n Cloud may block `$env` access inside Code nodes; verify compatibility before importing there.
+## If something fails
+
+n8n logs the time, run ID, and result; Failure Alert emails CAREER_ALERT_EMAIL_TO. Job Matches upserts by HN Item ID. Digest Runs is marked Attempted before Gmail and Sent afterward. Attempted means delivery is uncertain. Check the execution and Gmail Sent before changing that row. Only remove the marker and rerun after deciding a resend is needed; Gmail may have sent despite a timeout.
+
+The workflow has a 900 second run limit, 15 second HTTP timeouts, and a 30 second AI timeout. The three HTTP attempts use a fixed two second wait, and n8n's generic retry can retry a permanent HTTP error; this is not selective backoff. Sheet and Gmail writes are not retried after an uncertain result. Sheets has no atomic unique key, so simultaneous runs can duplicate rows or digests. Keep one run at a time and reconcile if needed.
+
+If n8n is offline at 8:00 AM, the scheduled run is missed. Run it manually after recovery. Use an outside uptime monitor. Review the profile, job source, owner, and inbox every quarter; retire the workflow when the job search ends. Test with live account connections before relying on the digest.
+
+
+## Go-live check
+
+- [ ] Dry run was tested; it touched no live account.
+- [ ] Secrets are in n8n credentials, and required environment settings are present.
+- [ ] The same item was run twice in a test account with no duplicate side effect.
+- [ ] Timeouts and retry limits were checked; uncertain Gmail or Sheets writes are reviewed by a person.
+- [ ] Failure Alert reaches the named operator, and an outside monitor covers n8n outages.
+- [ ] The operator knows how to set CAREER_ENABLED=false and deactivate the workflow.\n
