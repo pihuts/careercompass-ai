@@ -1,87 +1,49 @@
 # CareerCompass AI
 
-An n8n automation that finds jobs worth applying to, scores them against your real profile, drafts a cover letter for each strong match, tracks everything in Google Sheets, and emails you a daily digest.
+Every day at 8:00 AM Manila time, or on a manual run, score recent hiring posts for a candidate, save strong matches, send one digest, and stop.
 
-![CareerCompass AI opened in n8n](screenshots/n8n-editor.png)
+![CareerCompass workflow in n8n](screenshots/n8n-overview.png)
+
+These images show a local n8n editor. Red icons mean credentials still need to be connected on your own instance.
+
+[Search and checks](screenshots/n8n-start.png) · [Match and digest steps](screenshots/n8n-finish.png)
 
 ## What it does
 
-1. Searches Hacker News for the monthly "Who is hiring?" thread.
-2. Pulls the individual job comments from the HN API.
-3. Cleans the raw HTML text.
-4. Sends each job + your profile to GPT-5.6 Sol with a strict JSON schema.
-5. Extracts structured fields: company, title, location, salary, apply URL, match score, match reasons, missing skills, email subject, and a cover letter draft.
-6. Upserts every strong match (score >= 75) to a Google Sheet, keyed on `HN Item ID`, so daily runs don't create duplicates.
-7. Emails you a digest with the strongest matches and their cover letter drafts.
+The workflow reads the configured Hacker News hiring thread and item API, checks job text against the candidate profile, asks OpenAI to score likely matches, and saves them in Job Matches. It emails a daily digest when matches exist. It does not apply to jobs, contact employers, or promise that a role accepts Philippine applicants. The candidate must check remote eligibility, salary currency, and every generated cover letter. No peso conversion is invented for a foreign salary.
 
-No auto-apply. The AI prepares the work; you review and send. That keeps applications honest and gives you control.
+Success means Job Matches rows keyed by HN Item ID and, when there are matches, one Digest Runs row for the Manila date and one Gmail digest. The candidate owns this workflow.
 
-## Files
+## Set up
 
-- `CareerCompass AI.json` - importable n8n workflow
-- `README.md` - this guide
+1. On self-hosted n8n, import CareerCompass AI.json and Failure Alert.json. Connect OpenAI, Google Sheets, and Gmail credentials. Restrict the Google account to the candidate's sheet and inbox.
+2. Make a Job Matches tab with: Date, Company, Role, Location, Work Mode, Salary, Match Score, Match Reasons, Missing Skills, Email Subject, Cover Letter, Apply URL, Company URL, HN Item ID, Status. Make a Digest Runs tab with: Date, Run ID, Count, Status.
+3. Set JOBHUNT_SHEET_ID, JOBHUNT_EMAIL_TO, JOBHUNT_PROFILE, JOBHUNT_SEARCH_URL, JOBHUNT_ITEM_API_BASE, and CAREER_ALERT_EMAIL_TO in the server environment. JOBHUNT_PROFILE must truthfully say the candidate is based in the Philippines and describe skills and work eligibility. Suggested starting URLs are https://hn.algolia.com/api/v1/search_by_date?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=story&hitsPerPage=30 and https://hacker-news.firebaseio.com/v0/item. Keep API keys in n8n credentials. Set N8N_BLOCK_ENV_ACCESS_IN_NODE=false on this dedicated instance.
+4. In the main workflow's n8n Settings, choose Failure Alert as its Error Workflow. Connect its Gmail node and test delivery. Optional limits: CAREER_MAX_JOBS=10 and CAREER_MIN_SCORE=75. Set N8N_CONCURRENCY_PRODUCTION_LIMIT=1 to reduce overlapping scheduled runs; manual runs can still overlap.
 
-## Architecture
+CAREER_ENABLED=true allows a run. Dry run is on unless CAREER_DRY_RUN=false. Dry run stops before public APIs, OpenAI, Sheets, and Gmail. Set CAREER_ENABLED=false and deactivate the workflow to stop new runs.
 
-```mermaid
-flowchart LR
-    T[Manual / Daily 8 AM trigger] --> A[HN Algolia search]
-    A --> B[Split hits]
-    B --> C[Keep recent posts]
-    C --> D[HN API main post]
-    D --> E[Split job comments]
-    E --> F[HN API job comment]
-    F --> G[Clean text]
-    G --> H[Limit 10 jobs]
-    H --> I[Candidate profile]
-    I --> J[GPT-5.6 Sol parse + score]
-    J --> K[Normalize output]
-    K --> L{Score >= 75}
-    L --> M[Google Sheets upsert]
-    K --> N[Build digest]
-    N --> O[Gmail digest]
-```
+## Test before using real job data
 
-## Setup
+1. Run python smoke_test.py after edits. It exits nonzero on failure. GitHub Actions runs it on pushes and pull requests.
+2. Enable the flag and leave dry run on. Run manually; confirm dry_run and no external calls.
+3. Use a test sheet and inbox, set CAREER_DRY_RUN=false, and run against a small known hiring thread. Check the rows, location filtering, and digest. Run again on the same Manila date; check that no second digest appears.
+4. Test an empty search result, a network failure, and Failure Alert delivery.
 
-1. Import the workflow:
-   - n8n -> Workflows -> Import from File -> `CareerCompass AI.json`
+## If something fails
 
-2. Set environment variables in n8n:
+n8n logs the time, run ID, and result; Failure Alert emails CAREER_ALERT_EMAIL_TO. Job Matches upserts by HN Item ID. Digest Runs is marked Attempted before Gmail and Sent afterward. Attempted means delivery is uncertain. Check the execution and Gmail Sent before changing that row. Only remove the marker and rerun after deciding a resend is needed; Gmail may have sent despite a timeout.
 
-   | Variable | Purpose |
-   |---|---|
-   | `JOBHUNT_SHEET_ID` | Google Sheets document ID |
-   | `JOBHUNT_EMAIL_TO` | Email address that receives the digest |
-   | `JOBHUNT_PROFILE` | Optional override for the candidate profile |
+The workflow has a 900 second run limit, 15 second HTTP timeouts, and a 30 second AI timeout. The three HTTP attempts use a fixed two second wait, and n8n's generic retry can retry a permanent HTTP error; this is not selective backoff. Sheet and Gmail writes are not retried after an uncertain result. Sheets has no atomic unique key, so simultaneous runs can duplicate rows or digests. Keep one run at a time and reconcile if needed.
 
-   Self-hosted n8n: add them to the container env or `.env`.
-   n8n Cloud: Settings -> Environment Variables.
+If n8n is offline at 8:00 AM, the scheduled run is missed. Run it manually after recovery. Use an outside uptime monitor. Review the profile, job source, owner, and inbox every quarter; retire the workflow when the job search ends. Test with live account connections before relying on the digest.
 
-3. Connect credentials:
-   - OpenAI (Chat Model node)
-   - Google Sheets (Log Matches node)
-   - Gmail OAuth2 (Email Digest node)
 
-4. Edit the `Candidate Profile` node with your real details: target role, skills, years of experience, location, remote preference.
+## Go-live check
 
-5. Create a Google Sheet tab named `Job Matches` with these headers:
-
-   ```
-   Date, Company, Role, Location, Work Mode, Salary, Match Score, Match Reasons, Missing Skills, Email Subject, Cover Letter, Apply URL, Company URL, HN Item ID, Status
-   ```
-
-   `Status` is optional and not overwritten by the workflow, so you can manually track Applied / Interview / Rejected.
-
-6. Test the workflow once with the "Test workflow" button. Then activate it.
-
-## Cost note
-
-Default run processes 10 jobs with `gpt-5.6-sol`. Raise `Limit Jobs per Run` if you want more coverage.
-
-## Ideas to extend it
-
-- Add a second job source (RemoteOK API, Greenhouse/Ashby feeds).
-- Add a Telegram or Slack channel for instant alerts.
-- Add an n8n form so you can mark a match as "Applied", "Interview", or "Rejected" and update the sheet.
-- Use a vector store to compare jobs against your resume instead of a static profile string.
+- [ ] Dry run was tested; it touched no live account.
+- [ ] Secrets are in n8n credentials, and required environment settings are present.
+- [ ] The same item was run twice in a test account with no duplicate side effect.
+- [ ] Timeouts and retry limits were checked; uncertain Gmail or Sheets writes are reviewed by a person.
+- [ ] Failure Alert reaches the named operator, and an outside monitor covers n8n outages.
+- [ ] The operator knows how to set CAREER_ENABLED=false and deactivate the workflow.\n
