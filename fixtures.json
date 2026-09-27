@@ -1,0 +1,14 @@
+{
+  "valid": {
+    "text": "<p>Automation engineer in Manila; remote within the Philippines.</p>",
+    "job_id": 123456
+  },
+  "empty": {},
+  "already_done": {
+    "Date": "2026-09-27",
+    "Status": "Sent"
+  },
+  "network_down": {
+    "error": "ECONNRESET"
+  }
+}

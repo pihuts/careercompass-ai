@@ -6,7 +6,10 @@
       "id": "trigger-manual",
       "name": "When clicking 'Test workflow'",
       "type": "n8n-nodes-base.manualTrigger",
-      "position": [-1100, 0],
+      "position": [
+        0,
+        0
+      ],
       "parameters": {},
       "typeVersion": 1
     },
@@ -14,7 +17,10 @@
       "id": "trigger-daily",
       "name": "Daily at 8 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "position": [-1100, 160],
+      "position": [
+        240,
+        0
+      ],
       "parameters": {
         "rule": {
           "interval": [
@@ -30,7 +36,10 @@
       "id": "sticky-overview",
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
-      "position": [0, -460],
+      "position": [
+        -400,
+        -500
+      ],
       "parameters": {
         "width": 820,
         "height": 240,
@@ -42,7 +51,10 @@
       "id": "sticky-setup",
       "name": "Sticky Note1",
       "type": "n8n-nodes-base.stickyNote",
-      "position": [1860, -460],
+      "position": [
+        -400,
+        -500
+      ],
       "parameters": {
         "width": 760,
         "height": 240,
@@ -54,19 +66,30 @@
       "id": "http-search",
       "name": "Search HN Who is Hiring",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [0, 0],
+      "position": [
+        960,
+        0
+      ],
       "parameters": {
-        "url": "https://hn.algolia.com/api/v1/search_by_date?query=%22Ask%20HN%3A%20Who%20is%20hiring%22&tags=story&hitsPerPage=30",
+        "url": "={{ $env.JOBHUNT_SEARCH_URL }}",
         "method": "GET",
-        "options": {}
+        "options": {
+          "timeout": 15000
+        }
       },
-      "typeVersion": 4.2
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "id": "split-hits",
       "name": "Split Search Hits",
       "type": "n8n-nodes-base.splitOut",
-      "position": [180, 0],
+      "position": [
+        1440,
+        0
+      ],
       "parameters": {
         "options": {},
         "fieldToSplitOut": "hits"
@@ -77,7 +100,10 @@
       "id": "set-metadata",
       "name": "Extract Post Metadata",
       "type": "n8n-nodes-base.set",
-      "position": [360, 0],
+      "position": [
+        1680,
+        0
+      ],
       "parameters": {
         "options": {},
         "assignments": {
@@ -104,7 +130,7 @@
               "id": "set-story-id",
               "name": "storyId",
               "type": "string",
-              "value": "={{ $json.story_id }}"
+              "value": "={{ $json.objectID }}"
             }
           ]
         }
@@ -115,7 +141,10 @@
       "id": "filter-recent",
       "name": "Keep Recent Posts",
       "type": "n8n-nodes-base.filter",
-      "position": [540, 0],
+      "position": [
+        1920,
+        0
+      ],
       "parameters": {
         "options": {},
         "conditions": {
@@ -145,18 +174,29 @@
       "id": "http-main-post",
       "name": "Get HN Main Post",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [720, 0],
+      "position": [
+        2400,
+        0
+      ],
       "parameters": {
-        "url": "=https://hacker-news.firebaseio.com/v0/item/{{ $json.storyId }}.json?print=pretty",
-        "options": {}
+        "url": "={{ $env.JOBHUNT_ITEM_API_BASE + '/' + $json.storyId + '.json' }}",
+        "options": {
+          "timeout": 15000
+        }
       },
-      "typeVersion": 4.2
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "id": "split-kids",
       "name": "Split Job Comments",
       "type": "n8n-nodes-base.splitOut",
-      "position": [900, 0],
+      "position": [
+        2640,
+        0
+      ],
       "parameters": {
         "options": {},
         "fieldToSplitOut": "kids"
@@ -167,18 +207,29 @@
       "id": "http-job-post",
       "name": "Get Job Comment",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [1080, 0],
+      "position": [
+        3120,
+        0
+      ],
       "parameters": {
-        "url": "=https://hacker-news.firebaseio.com/v0/item/{{ $json.kids }}.json?print=pretty",
-        "options": {}
+        "url": "={{ $env.JOBHUNT_ITEM_API_BASE + '/' + $json.kids + '.json' }}",
+        "options": {
+          "timeout": 15000
+        }
       },
-      "typeVersion": 4.2
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
     },
     {
       "id": "set-text",
       "name": "Extract Comment Text",
       "type": "n8n-nodes-base.set",
-      "position": [1260, 0],
+      "position": [
+        3360,
+        0
+      ],
       "parameters": {
         "options": {},
         "assignments": {
@@ -204,7 +255,10 @@
       "id": "code-clean",
       "name": "Clean Job Text",
       "type": "n8n-nodes-base.code",
-      "position": [1440, 0],
+      "position": [
+        3600,
+        0
+      ],
       "parameters": {
         "jsCode": "const results = [];\nfor (const item of $input.all()) {\n  const j = item.json || {};\n  let text = typeof j.text === 'string' ? j.text : JSON.stringify(j);\n  text = String(text)\n    .replace(/&#x2F;/g, '/')\n    .replace(/&#x27;/g, \"'\")\n    .replace(/&\\w+;/g, ' ')\n    .replace(/<[^>]*>/g, '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n  results.push({ json: { cleaned_text: text, job_id: j.job_id } });\n}\nreturn results;"
       },
@@ -214,9 +268,12 @@
       "id": "limit-jobs",
       "name": "Limit Jobs per Run",
       "type": "n8n-nodes-base.limit",
-      "position": [1620, 0],
+      "position": [
+        2880,
+        0
+      ],
       "parameters": {
-        "maxItems": 10
+        "maxItems": "={{ Number($env.CAREER_MAX_JOBS || 10) }}"
       },
       "typeVersion": 1
     },
@@ -224,7 +281,10 @@
       "id": "set-profile",
       "name": "Candidate Profile",
       "type": "n8n-nodes-base.set",
-      "position": [1800, 0],
+      "position": [
+        3840,
+        0
+      ],
       "parameters": {
         "options": {},
         "assignments": {
@@ -239,7 +299,7 @@
               "id": "set-profile-value",
               "name": "candidateProfile",
               "type": "string",
-              "value": "={{ $env.JOBHUNT_PROFILE || 'Role: Automation Developer / n8n Workflow Engineer; Skills: n8n, TypeScript, Python, REST APIs, OpenAI, LangChain, Google Sheets, Gmail API, Docker; Experience: 3+ years building production automation and AI workflows; Location: Remote / Singapore; Availability: Immediate' }}"
+              "value": "={{ $env.JOBHUNT_PROFILE }}"
             }
           ]
         }
@@ -250,14 +310,19 @@
       "id": "openai-model",
       "name": "OpenAI Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-      "position": [1980, -200],
+      "position": [
+        4080,
+        320
+      ],
       "parameters": {
         "model": {
           "__rl": true,
           "mode": "list",
           "value": "gpt-5.6-sol"
         },
-        "options": {}
+        "options": {
+          "timeout": 30000
+        }
       },
       "typeVersion": 1.2
     },
@@ -265,7 +330,10 @@
       "id": "output-parser",
       "name": "Structured Output Parser",
       "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "position": [2160, -200],
+      "position": [
+        4080,
+        560
+      ],
       "parameters": {
         "schemaType": "manual",
         "inputSchema": "{\"type\":\"object\",\"properties\":{\"company\":{\"type\":[\"string\",\"null\"],\"description\":\"Hiring company name\"},\"title\":{\"type\":[\"string\",\"null\"],\"description\":\"Job title\"},\"location\":{\"type\":[\"string\",\"null\"],\"description\":\"Location including remote\"},\"type\":{\"type\":[\"string\",\"null\"],\"enum\":[\"FULL_TIME\",\"PART_TIME\",\"CONTRACT\",\"INTERNSHIP\",\"FREELANCE\",null],\"description\":\"Employment type\"},\"work_location\":{\"type\":[\"string\",\"null\"],\"enum\":[\"REMOTE\",\"HYBRID\",\"ON_SITE\",null],\"description\":\"Work arrangement\"},\"salary\":{\"type\":[\"string\",\"null\"],\"description\":\"Compensation\"},\"description\":{\"type\":[\"string\",\"null\"],\"description\":\"Job description\"},\"apply_url\":{\"type\":[\"string\",\"null\"],\"description\":\"Application URL\"},\"company_url\":{\"type\":[\"string\",\"null\"],\"description\":\"Company website\"},\"hn_item_id\":{\"type\":[\"string\",\"null\"],\"description\":\"Hacker News item id from JOB REFERENCE\"},\"email_subject\":{\"type\":[\"string\",\"null\"],\"description\":\"Short personalized application email subject\"},\"match_score\":{\"type\":[\"number\",\"null\"],\"description\":\"0-100 fit score\"},\"match_reasons\":{\"type\":[\"array\",\"null\"],\"items\":{\"type\":\"string\"},\"description\":\"3-5 specific reasons\"},\"missing_skills\":{\"type\":[\"array\",\"null\"],\"items\":{\"type\":\"string\"},\"description\":\"2-4 missing skills\"},\"cover_letter\":{\"type\":[\"string\",\"null\"],\"description\":\"120-180 word cover letter draft\"}},\"required\":[\"company\",\"title\",\"location\",\"type\",\"work_location\",\"salary\",\"description\",\"apply_url\",\"company_url\",\"hn_item_id\",\"email_subject\",\"match_score\",\"match_reasons\",\"missing_skills\",\"cover_letter\"]}"
@@ -276,13 +344,16 @@
       "id": "chain-score",
       "name": "Parse and Score Job",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
-      "position": [1980, 0],
+      "position": [
+        4080,
+        0
+      ],
       "parameters": {
         "text": "={{ $json.jobText }}\n\n=== CANDIDATE PROFILE ===\n{{ $json.candidateProfile }}",
         "messages": {
           "messageValues": [
             {
-              "message": "You are a strict technical recruiter and career coach. Extract the job details from the text into the provided JSON schema, using the JOB REFERENCE for hn_item_id. Then score the job 0-100 against the CANDIDATE PROFILE. Be strict: only give 75+ when the candidate clearly matches 70% or more of the required skills and the location/remote policy. Include 3-5 match reasons, 2-4 missing skills, a short personalized email subject, and a 120-180 word cover letter draft that uses only facts from the profile. Return valid JSON only."
+              "message": "You are a strict technical recruiter and career coach. Extract the job details from the text into the provided JSON schema, using the JOB REFERENCE for hn_item_id. Then score the job 0-100 against the CANDIDATE PROFILE. Be strict: only give 75+ when the candidate clearly matches 70% or more of the required skills and the location/remote policy. Include 3-5 match reasons, 2-4 missing skills, a short personalized email subject, and a 120-180 word cover letter draft that uses only facts from the profile. Return valid JSON only. A candidate based in the Philippines must be eligible for the listed location and remote policy. Do not infer work authorization."
             }
           ]
         },
@@ -295,9 +366,12 @@
       "id": "code-normalize",
       "name": "Normalize AI Output",
       "type": "n8n-nodes-base.code",
-      "position": [2160, 0],
+      "position": [
+        4320,
+        0
+      ],
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst results = [];\nconst str = (v) => v === null || v === undefined ? '' : String(v);\nconst list = (v) => Array.isArray(v) ? v.map(str).join(' | ') : str(v);\nfor (const item of items) {\n  const raw = item.json.output || item.json;\n  results.push({\n    json: {\n      company: str(raw.company),\n      title: str(raw.title),\n      location: str(raw.location),\n      employment_type: str(raw.type),\n      work_location: str(raw.work_location),\n      salary: str(raw.salary),\n      description: str(raw.description),\n      apply_url: str(raw.apply_url),\n      company_url: str(raw.company_url),\n      hn_item_id: str(raw.hn_item_id),\n      email_subject: str(raw.email_subject),\n      match_score: Number(raw.match_score) || 0,\n      match_reasons: list(raw.match_reasons),\n      missing_skills: list(raw.missing_skills),\n      cover_letter: str(raw.cover_letter)\n    }\n  });\n}\nreturn results;"
+        "jsCode": "const items = $input.all();\nconst results = [];\nconst str = (v) => v === null || v === undefined ? '' : String(v);\nconst list = (v) => Array.isArray(v) ? v.map(str).join(' | ') : str(v);\nfor (const item of items) {\n  const raw = item.json.output || item.json;\n  const source = $('Candidate Profile').all()[results.length].json;\n  results.push({\n    json: {\n      company: str(raw.company),\n      title: str(raw.title),\n      location: str(raw.location),\n      employment_type: str(raw.type),\n      work_location: str(raw.work_location),\n      salary: str(raw.salary),\n      description: str(raw.description),\n      apply_url: str(raw.apply_url),\n      company_url: str(raw.company_url),\n      hn_item_id: str(source.jobText.match(/JOB REFERENCE: (\\d+)/)?.[1]),\n      email_subject: str(raw.email_subject),\n      match_score: Number(raw.match_score) || 0,\n      match_reasons: list(raw.match_reasons),\n      missing_skills: list(raw.missing_skills),\n      cover_letter: str(raw.cover_letter)\n    }\n  });\n}\nreturn results;"
       },
       "typeVersion": 2
     },
@@ -305,7 +379,10 @@
       "id": "filter-strong",
       "name": "Strong Matches Only",
       "type": "n8n-nodes-base.filter",
-      "position": [2340, 0],
+      "position": [
+        4560,
+        0
+      ],
       "parameters": {
         "options": {},
         "conditions": {
@@ -323,7 +400,7 @@
                 "operation": "gte"
               },
               "leftValue": "={{ $json.match_score }}",
-              "rightValue": 75
+              "rightValue": "={{ Number($env.CAREER_MIN_SCORE || 75) }}"
             }
           ]
         }
@@ -334,7 +411,10 @@
       "id": "sheets-log",
       "name": "Log Matches to Google Sheets",
       "type": "n8n-nodes-base.googleSheets",
-      "position": [2520, 0],
+      "position": [
+        5040,
+        0
+      ],
       "parameters": {
         "operation": "appendOrUpdate",
         "documentId": {
@@ -531,9 +611,12 @@
       "id": "code-digest",
       "name": "Build Digest",
       "type": "n8n-nodes-base.code",
-      "position": [2340, 240],
+      "position": [
+        4800,
+        0
+      ],
       "parameters": {
-        "jsCode": "const jobs = $input.all()\n  .map((i) => i.json)\n  .filter((j) => Number(j.match_score) >= 75)\n  .sort((a, b) => Number(b.match_score) - Number(a.match_score))\n  .slice(0, 10);\nreturn [{ json: { jobs: jobs, count: jobs.length } }];"
+        "jsCode": "const jobs = $input.all()\n  .map((i) => i.json)\n  .filter((j) => Number(j.match_score) >= Number($env.CAREER_MIN_SCORE || 75))\n  .sort((a, b) => Number(b.match_score) - Number(a.match_score))\n  .slice(0, Number($env.CAREER_MAX_JOBS || 10));\nreturn jobs.length ? [{ json: { jobs, count: jobs.length } }] : [];"
       },
       "typeVersion": 2
     },
@@ -541,15 +624,278 @@
       "id": "gmail-digest",
       "name": "Email Daily Digest",
       "type": "n8n-nodes-base.gmail",
-      "position": [2520, 240],
+      "position": [
+        6720,
+        0
+      ],
       "parameters": {
         "sendTo": "={{ $env.JOBHUNT_EMAIL_TO || 'your@email.com' }}",
         "subject": "=CareerCompass AI - {{ $json.count }} strong matches ({{ $now.format('dd MMM yyyy') }})",
-        "message": "=<html><body style='font-family:Arial,sans-serif;background:#f6f8fa;padding:24px'><div style='max-width:640px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px'><h2 style='margin-top:0'>CareerCompass AI</h2><p><strong>{{ $json.count }}</strong> strong match(es) found today.</p>{{ $json.jobs.map(j => `<div style='border:1px solid #e1e4e8;border-radius:6px;padding:16px;margin:12px 0'><h3 style='margin:0 0 4px'><a href='${j.apply_url}'>${j.title}</a> @ ${j.company}</h3><p style='margin:4px 0'>Score: <strong>${j.match_score}/100</strong> | ${j.location} | ${j.work_location}</p><p style='margin:4px 0'><strong>Why:</strong> ${j.match_reasons}</p><p style='margin:4px 0'><strong>Missing skills:</strong> ${j.missing_skills || 'None'}</p><p style='margin:4px 0'><strong>Suggested subject:</strong> ${j.email_subject}</p><p style='margin:4px 0'><strong>Cover letter draft:</strong></p><blockquote style='margin:4px 0;padding:8px 12px;background:#f6f8fa;border-left:3px solid #2da44e'>${j.cover_letter}</blockquote></div>`).join('') || '<p>No strong matches today. Review your profile or lower the threshold.</p>'}</div></body></html>",
+        "message": "={{ $json.jobs.map(j => `${j.title} @ ${j.company}\\nScore: ${j.match_score}/100 | ${j.location} | ${j.work_location}\\nApply: ${j.apply_url}\\nWhy: ${j.match_reasons}\\nMissing: ${j.missing_skills}\\nCover letter draft:\\n${j.cover_letter}`).join('\\n\\n---\\n\\n') }}",
         "options": {},
-        "emailType": "html"
+        "emailType": "text"
       },
       "typeVersion": 2
+    },
+    {
+      "id": "preflight",
+      "name": "Preflight",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const env = $env;\nconst enabled = env.CAREER_ENABLED === 'true';\nconst dryRun = env.CAREER_DRY_RUN !== 'false';\nconst required = [\"JOBHUNT_SHEET_ID\", \"JOBHUNT_EMAIL_TO\", \"JOBHUNT_PROFILE\", \"JOBHUNT_SEARCH_URL\", \"JOBHUNT_ITEM_API_BASE\", \"CAREER_ALERT_EMAIL_TO\"];\nif (enabled && !dryRun) {\n  const missing = required.filter(key => !String(env[key] || '').trim());\n  if (missing.length) throw new Error('Missing configuration: ' + missing.join(', '));\n}\nconst runId = String($execution.id);\nconst status = !enabled ? 'disabled' : dryRun ? 'dry_run' : 'running';\nconsole.log(JSON.stringify({timestamp: new Date().toISOString(), runId, workflow: 'CAREER', status}));\nconst first = $input.first();\nreturn [{json: {...first.json, runId, status, runLive: status === 'running'}, ...(first.binary ? {binary: first.binary} : {})}];"
+      }
+    },
+    {
+      "id": "run-live?",
+      "name": "Run live?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "live-run",
+              "leftValue": "={{ $json.runLive }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "stopped-or-dry-run",
+      "name": "Stopped or dry run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "console.log(JSON.stringify({timestamp: new Date().toISOString(), runId: $json.runId, result: $json.status})); return [{json: {status: $json.status, runId: $json.runId}}];"
+      }
+    },
+    {
+      "id": "latest-hiring-thread-only",
+      "name": "Latest hiring thread only",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "maxItems": 1
+      }
+    },
+    {
+      "id": "log-digest-attempt",
+      "name": "Log digest attempt",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        6240,
+        0
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.JOBHUNT_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Digest Runs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "Date"
+          ],
+          "value": {
+            "Date": "={{ $now.setZone('Asia/Manila').toFormat('yyyy-MM-dd') }}",
+            "Run ID": "={{ String($execution.id) }}",
+            "Count": "={{ $json.count }}",
+            "Status": "=Attempted"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "find-existing-digest-runs",
+      "name": "Find existing digest runs",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        5280,
+        0
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.JOBHUNT_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Digest Runs",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Date",
+              "lookupValue": "={{ $now.setZone('Asia/Manila').toFormat('yyyy-MM-dd') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "new-digest-runs?",
+      "name": "New digest runs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5760,
+        0
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "new-record",
+              "leftValue": "={{ !$json['Date'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "restore-input-for-digest-runs",
+      "name": "Restore input for digest runs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6000,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [{json: $('Build Digest').first().json}];"
+      }
+    },
+    {
+      "id": "restore-build-digest",
+      "name": "Restore Build Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6480,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [{json: $('Build Digest').item.json}];"
+      }
+    },
+    {
+      "id": "log-digest-sent",
+      "name": "Log digest sent",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        6960,
+        0
+      ],
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.JOBHUNT_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Digest Runs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "Date"
+          ],
+          "value": {
+            "Date": "={{ $now.setZone('Asia/Manila').toFormat('yyyy-MM-dd') }}",
+            "Run ID": "={{ String($execution.id) }}",
+            "Count": "={{ $('Build Digest').first().json.count }}",
+            "Status": "=Sent"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "audit-log-matches-to-google-sheets",
+      "name": "Audit log matches to google sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "console.log(JSON.stringify({timestamp:new Date().toISOString(), runId:String($execution.id), result:'recorded', action:'Log Matches to Google Sheets'})); return $input.all();"
+      }
+    },
+    {
+      "id": "audit-log-digest-sent",
+      "name": "Audit log digest sent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "console.log(JSON.stringify({timestamp:new Date().toISOString(), runId:String($execution.id), result:'sent', action:'Log digest sent'})); return $input.all();"
+      }
     }
   ],
   "connections": {
@@ -557,7 +903,7 @@
       "main": [
         [
           {
-            "node": "Search HN Who is Hiring",
+            "node": "Preflight",
             "type": "main",
             "index": 0
           }
@@ -568,7 +914,7 @@
       "main": [
         [
           {
-            "node": "Search HN Who is Hiring",
+            "node": "Preflight",
             "type": "main",
             "index": 0
           }
@@ -612,7 +958,7 @@
       "main": [
         [
           {
-            "node": "Get HN Main Post",
+            "node": "Latest hiring thread only",
             "type": "main",
             "index": 0
           }
@@ -634,7 +980,7 @@
       "main": [
         [
           {
-            "node": "Get Job Comment",
+            "node": "Limit Jobs per Run",
             "type": "main",
             "index": 0
           }
@@ -667,7 +1013,7 @@
       "main": [
         [
           {
-            "node": "Limit Jobs per Run",
+            "node": "Candidate Profile",
             "type": "main",
             "index": 0
           }
@@ -678,7 +1024,7 @@
       "main": [
         [
           {
-            "node": "Candidate Profile",
+            "node": "Get Job Comment",
             "type": "main",
             "index": 0
           }
@@ -760,7 +1106,135 @@
       "main": [
         [
           {
+            "node": "Find existing digest runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preflight": {
+      "main": [
+        [
+          {
+            "node": "Run live?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run live?": {
+      "main": [
+        [
+          {
+            "node": "Search HN Who is Hiring",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stopped or dry run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Latest hiring thread only": {
+      "main": [
+        [
+          {
+            "node": "Get HN Main Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find existing digest runs": {
+      "main": [
+        [
+          {
+            "node": "New digest runs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New digest runs?": {
+      "main": [
+        [
+          {
+            "node": "Restore input for digest runs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore input for digest runs": {
+      "main": [
+        [
+          {
+            "node": "Log digest attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log digest attempt": {
+      "main": [
+        [
+          {
+            "node": "Restore Build Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Build Digest": {
+      "main": [
+        [
+          {
             "node": "Email Daily Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Daily Digest": {
+      "main": [
+        [
+          {
+            "node": "Log digest sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Matches to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Audit log matches to google sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log digest sent": {
+      "main": [
+        [
+          {
+            "node": "Audit log digest sent",
             "type": "main",
             "index": 0
           }
@@ -771,7 +1245,12 @@
   "active": false,
   "pinData": {},
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "timezone": "Asia/Manila",
+    "executionTimeout": 900,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true
   },
   "versionId": "v1-careercompass-ai",
   "tags": [],
